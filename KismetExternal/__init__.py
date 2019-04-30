@@ -285,7 +285,7 @@ class ExternalInterface(object):
         """
         self.handlers[command] = handler
 
-    def add_uri_handler(self, method, uri, auth, handler):
+    def add_uri_handler(self, method, uri, handler):
         """
         Register a URI handler with Kismet; this will be called whenever that URI is 
         triggered on the Kismet REST interface.  A URI should be a complete path, and
@@ -293,7 +293,6 @@ class ExternalInterface(object):
 
         :param method: HTTP method (GET or POST)
         :param uri: Full URI
-        :param auth: User login/authentication required?  (Bool)
         :param handler: Handler function, called with http_pb2.HttpRequest object)
         :return: None
         """
@@ -307,7 +306,6 @@ class ExternalInterface(object):
         reguri = http_pb2.HttpRegisterUri()
         reguri.method = method
         reguri.uri = uri
-        reguri.auth_required = auth
 
         self.write_ext_packet("HTTPREGISTERURI", reguri)
 
