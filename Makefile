@@ -1,15 +1,18 @@
-PYTHON2 ?= /usr/bin/env python2
+PYTHON ?= /usr/bin/env python2
 PROTOCBIN ?= protoc
 
 all:	
-	$(PYTHON2) ./setup.py build
+	$(PYTHON) ./setup.py bdist
 	
 install:
-	$(PYTHON2) ./setup.py install
+	$(PYTHON) ./setup.py install
 
 protobuf:
-	$(PROTOCBIN) -I ./protobuf_definitions --python_out=./KismetExternal ./protobuf_definitions/*.proto
+	( cd KismetExternal; \
+	  $(PROTOCBIN) -I ../protobuf_definitions --python_out=. ../protobuf_definitions/*.proto; \
+	  sed -i -E 's/^import.*_pb2/from . \0/' *_pb2.py ; \
+	)
 
 clean:
-	@-$(PYTHON2) ./setup.py clean
+	@-$(PYTHON) ./setup.py clean
 
