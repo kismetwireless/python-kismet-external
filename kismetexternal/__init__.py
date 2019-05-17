@@ -26,6 +26,8 @@ from . import kismet_pb2
 from . import http_pb2
 from . import datasource_pb2
 
+__version__ = "2019.05.00"
+
 class ExternalInterface(object):
     """ 
     External interface super-class
