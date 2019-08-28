@@ -19,14 +19,22 @@ import os
 import select
 import socket
 import struct
+import sys
 import threading
 import time
+
+import google.protobuf
+
+if not '__version__' in dir(google.protobuf) and sys.version_info > (3, 0):
+    print("It looks like you have Python3 but a very old protobuf library, these are ")
+    print("not compatible; please update to python3-protobuf >= 3.0.0")
+    sys.exit(1)
 
 from . import kismet_pb2
 from . import http_pb2
 from . import datasource_pb2
 
-__version__ = "2019.05.01"
+__version__ = "2019.08.02"
 
 class ExternalInterface(object):
     """ 
@@ -254,6 +262,9 @@ class ExternalInterface(object):
         if not calc_csum == checksum:
             print(content.encode('hex'))
             raise BufferError("Invalid checksum in packet header {} vs {}".format(calc_csum, checksum))
+
+        if not '__version__' in dir(google.protobuf):
+            content = str(content)
 
         cmd = kismet_pb2.Command()
         cmd.ParseFromString(content)
