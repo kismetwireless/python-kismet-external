@@ -169,14 +169,14 @@ class ExternalInterface(object):
                     self.kill_ioloop = True
                     return
 
-                if self.infd >= 0:
+                if self.infd is not None and self.infd >= 0:
                     in_fd_alias = self.infd
                 elif self.remote_sock is not None:
                     in_fd_alias = self.remote_sock
                 else:
                     raise RuntimeError("No valid input socket")
 
-                if self.outfd >= 0:
+                if self.outfd is not None and self.outfd >= 0:
                     out_fd_alias = self.outfd
                 elif self.remote_sock is not None:
                     out_fd_alias = self.remote_sock
