@@ -703,7 +703,7 @@ class Datasource(ExternalInterface):
         except Exception as e:
             print("Unhandled exception in opensource callback", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
-            self.send_datasource_oen_report(seqno, success=False,
+            self.send_datasource_open_report(seqno, success=False,
                     message="unhandled exception {} in opensource callback".format(e))
             self.spindown()
             return
