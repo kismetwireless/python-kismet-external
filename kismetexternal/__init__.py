@@ -39,7 +39,7 @@ from . import kismet_pb2
 from . import http_pb2
 from . import datasource_pb2
 
-__version__ = "2019.09.03"
+__version__ = "2020.03.00"
 
 class ExternalInterface(object):
     """ 
@@ -145,9 +145,10 @@ class ExternalInterface(object):
 
             return reader, writer
         except Exception as e:
-            print("Failed to connect to remote host:", e, file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
+            print("Failed to connect to remote host: ", e, file=sys.stderr)
+            # traceback.print_exc(file=sys.stderr)
             self.kill()
+            raise RuntimeError("Unable to connect to remote host: {}".format(e))
 
     @staticmethod
     def adler32(data):
@@ -197,8 +198,12 @@ class ExternalInterface(object):
                 if not self.last_pong == 0 and time.time() - self.last_pont > 5:
                     raise RuntimeError("No PONG from Kismet in 5 seconds")
 
-                if self.graceful_spindown:
-                    await self.ext_writer.drain()
+                try:
+                    if self.graceful_spindown:
+                        await self.ext_writer.drain()
+                        self.kill_ioloop = True
+                        return
+                except Exception as e:
                     self.kill_ioloop = True
                     return
 
@@ -283,8 +288,9 @@ class ExternalInterface(object):
         elif self.remote is not None:
             if self.debug:
                 print("asyncio building connection to remote", self.remote)
-
+            
             self.ext_reader, self.ext_writer = await self.__async_open_remote(self.remote)
+
         else:
             raise RuntimeError("Expected descriptor pair or remote connection")
 
@@ -324,9 +330,13 @@ class ExternalInterface(object):
         Shim around async await
         """
 
-        self.loop.run_until_complete(self.__asyncio_connect())
+        try:
+            self.loop.run_until_complete(self.__asyncio_connect())
+        except RuntimeError:
+            print("Failed to connect to remote host, exiting.")
+            return -1
 
-        return
+        return 0
 
     def add_task(self, task, args = []):
         """
@@ -427,6 +437,7 @@ class ExternalInterface(object):
         :return: None
         """
         self.graceful_spindown = True
+
         try:
             self.loop.run_until_complete(self.ext_writer.drain())
         except Exception as e:
