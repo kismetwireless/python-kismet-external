@@ -39,7 +39,7 @@ from . import kismet_pb2
 from . import http_pb2
 from . import datasource_pb2
 
-__version__ = "2020.03.00"
+__version__ = "2020.04.01"
 
 class ExternalInterface(object):
     """ 
@@ -219,9 +219,9 @@ class ExternalInterface(object):
                 # form a full packet
                 self.__recv_packet()
         except Exception as e:
-            print("FATAL:  Encountered an error writing to Kismet", e, file=sys.stderr)
+            print("FATAL:  Encountered an error receiving data from Kismet", e, file=sys.stderr)
+            self.running = False
             self.kill()
-            return
         finally:
             self.running = False
             self.kill()
@@ -284,7 +284,11 @@ class ExternalInterface(object):
         """
 
         if self.infd is not None and self.infd >= 0 and self.outfd is not None and self.outfd >= 0:
+            if self.debug:
+                print("DEBUG:  Linking descriptors", self.infd, self.outfd, file=sys.stderr)
             self.ext_reader, self.ext_writer = await self.__async_open_fds()
+            if self.debug:
+                print("DEBUG:  Linked descriptors", self.infd, self.outfd, self.ext_writer, file=sys.stderr)
         elif self.remote is not None:
             if self.debug:
                 print("asyncio building connection to remote", self.remote)
@@ -411,13 +415,9 @@ class ExternalInterface(object):
         :return: None
         """
         self.kill_ioloop = True
+        self.running = False
       
-        if self.debug:
-            print("cancelling tasks", len(self.additional_tasks))
         [task.cancel() for task in self.additional_tasks]
-
-        if self.debug:
-            print("calling exit functions", len(self.exit_callbacks))
         [cb() for cb in self.exit_callbacks]
 
         if not self.main_io_task == None:
@@ -457,6 +457,9 @@ class ExternalInterface(object):
         """
 
         try:
+            if not 'ext_writer' in vars(self):
+                raise RuntimeError("packet written before connection established")
+
             signature = 0xDECAFBAD
             serial = bytearray(kedata.SerializeToString())
 
