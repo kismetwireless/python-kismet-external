@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import os
 import re
@@ -26,5 +26,3 @@ setup(name='kismetexternal',
       python_requires='>=3.2',
       packages=find_packages(),
      )
-
-
