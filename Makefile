@@ -1,6 +1,8 @@
 PYTHON ?= /usr/bin/env python3
 PROTOCBIN ?= protoc
 
+.PHONY: all install protobuf clean
+
 all:
 	$(PYTHON) ./setup.py bdist
 
