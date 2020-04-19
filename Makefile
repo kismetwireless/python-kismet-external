@@ -1,4 +1,4 @@
-PYTHON ?= /usr/bin/env python2
+PYTHON ?= /usr/bin/env python3
 PROTOCBIN ?= protoc
 
 all:	
