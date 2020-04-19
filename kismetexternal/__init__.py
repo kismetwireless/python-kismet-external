@@ -439,7 +439,8 @@ class ExternalInterface(object):
         self.graceful_spindown = True
 
         try:
-            self.loop.run_until_complete(self.ext_writer.drain())
+            if 'ext_writer' in vars(self):
+                self.loop.run_until_complete(self.ext_writer.drain())
         except Exception as e:
             # Silently ignore any errors draining, we just need to get out and die
             pass
