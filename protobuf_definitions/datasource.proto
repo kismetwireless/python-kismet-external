@@ -215,4 +215,3 @@ message ProbeSourceReport {
 message WarningReport {
     required string warning = 1;
 }
-

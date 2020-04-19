@@ -26,5 +26,3 @@ setup(name='kismetexternal',
       python_requires='>=3.2',
       packages=find_packages(),
      )
-
-

@@ -1,9 +1,9 @@
 PYTHON ?= /usr/bin/env python3
 PROTOCBIN ?= protoc
 
-all:	
+all:
 	$(PYTHON) ./setup.py bdist
-	
+
 install:
 	$(PYTHON) ./setup.py install
 
@@ -15,4 +15,3 @@ protobuf:
 
 clean:
 	@-$(PYTHON) ./setup.py clean
-

@@ -42,12 +42,12 @@ from . import datasource_pb2
 __version__ = "2020.04.01"
 
 class ExternalInterface(object):
-    """ 
+    """
     External interface super-class
     """
     def __init__(self, infd=-1, outfd=-1, remote=None):
         """
-        Initialize the external interface; interfaces launched by Kismet are 
+        Initialize the external interface; interfaces launched by Kismet are
         mapped to a pipe passed via --in-fd and --out-fd arguments; remote
         interfaces are initialized with a host:port
 
@@ -192,7 +192,7 @@ class ExternalInterface(object):
 
     async def __io_loop(self):
         # A much simplified rx io loop using asyncio; we look to see if we're
-        # shutting down 
+        # shutting down
         try:
             while not self.kill_ioloop:
                 if not self.last_pong == 0 and time.time() - self.last_pont > 5:
@@ -292,7 +292,7 @@ class ExternalInterface(object):
         elif self.remote is not None:
             if self.debug:
                 print("asyncio building connection to remote", self.remote)
-            
+
             self.ext_reader, self.ext_writer = await self.__async_open_remote(self.remote)
 
         else:
@@ -305,8 +305,8 @@ class ExternalInterface(object):
         """
 
         try:
-            # Bring up the IO loop task; it's the only task we absolutely care 
-            # about.  Other tasks can come and go, if this one dies, we have 
+            # Bring up the IO loop task; it's the only task we absolutely care
+            # about.  Other tasks can come and go, if this one dies, we have
             # to shut down.
 
             # From this point onwards we exist inside this asyncio wait
@@ -378,7 +378,7 @@ class ExternalInterface(object):
 
     def add_uri_handler(self, method, uri, handler):
         """
-        Register a URI handler with Kismet; this will be called whenever that URI is 
+        Register a URI handler with Kismet; this will be called whenever that URI is
         triggered on the Kismet REST interface.  A URI should be a complete path, and
         include the file extension.
 
@@ -416,7 +416,7 @@ class ExternalInterface(object):
         """
         self.kill_ioloop = True
         self.running = False
-      
+
         [task.cancel() for task in self.additional_tasks]
         [cb() for cb in self.exit_callbacks]
 
@@ -448,7 +448,7 @@ class ExternalInterface(object):
 
     def write_raw_packet(self, kedata):
         """
-        Wrap a raw piece of data in a Kismet external interface frame and write it; 
+        Wrap a raw piece of data in a Kismet external interface frame and write it;
         this data must be a serialized kismet_pb2.Command frame.
 
         :param kedata: Serialized kismet_pb2.Command data
@@ -617,7 +617,7 @@ class ExternalInterface(object):
 
 
 class Datasource(ExternalInterface):
-    """ 
+    """
     Datasource implementation
     """
     def __init__(self, infd=-1, outfd=-1, remote=None):
@@ -696,31 +696,31 @@ class Datasource(ExternalInterface):
         :return: (source, options{} dictionary) as tuple
         """
         options = {}
-    
+
         colon = definition.find(':')
-    
+
         if colon == -1:
             return definition, {}
-    
+
         source = definition[:colon]
         right = definition[colon + 1:]
-    
+
         while len(right):
             eqpos = right.find('=')
             if eqpos == -1:
                 return None, None
-    
+
             key = right[:eqpos]
             right = right[eqpos + 1:]
-    
+
             # If we're quoted
             if right[0] == '"':
                 right = right[1:]
                 endq = right.find('"')
-    
+
                 if endq == -1:
                     return None, None
-    
+
                 val = right[:endq]
                 options[key] = val
                 right = right[endq + 1:]
@@ -729,11 +729,11 @@ class Datasource(ExternalInterface):
 
                 if endcomma == -1:
                     endcomma = len(right)
-    
+
                 val = right[:endcomma]
                 options[key] = val
                 right = right[endcomma + 1:]
-    
+
         return source, options
 
     def __handle_kds_configure(self, seqno, packet):
@@ -745,7 +745,7 @@ class Datasource(ExternalInterface):
                                                   message="helper does not support source configuration")
             self.spindown()
             return
-           
+
         try:
             opts = self.configuresource(seqno, conf)
         except Exception as e:
@@ -756,7 +756,7 @@ class Datasource(ExternalInterface):
             self.spindown()
             return
 
-        
+
         if opts is None:
             self.send_datasource_configure_report(seqno, success=False,
                                                   message="helper does not support source configuration")

@@ -27,4 +27,3 @@ message LinuxBluetoothDataReport {
     optional KismetDatasource.SubSignal signal = 4;
     required SubLinuxBluetoothDevice btdevice = 5;
 }
-
