@@ -39,7 +39,7 @@ from . import kismet_pb2
 from . import http_pb2
 from . import datasource_pb2
 
-__version__ = "2020.04.01"
+__version__ = "2020.04.02"
 
 class ExternalInterface(object):
     """
@@ -440,7 +440,8 @@ class ExternalInterface(object):
 
         try:
             if 'ext_writer' in vars(self):
-                self.loop.run_until_complete(self.ext_writer.drain())
+                task = self.loop.create_task(self.ext_writer.drain())
+                self.loop.run_until_complete(task)
         except Exception as e:
             # Silently ignore any errors draining, we just need to get out and die
             pass
