@@ -18,6 +18,7 @@ from __future__ import print_function
 import asyncio
 import errno
 import fcntl
+import json
 import os
 import select
 import signal
@@ -38,6 +39,7 @@ if not '__version__' in dir(google.protobuf) and sys.version_info > (3, 0):
 from . import kismet_pb2
 from . import http_pb2
 from . import datasource_pb2
+from . import eventbus_pb2
 
 __version__ = "2020.07.01"
 
@@ -94,11 +96,13 @@ class ExternalInterface(object):
 
         self.add_handler("HTTPAUTH", self.__handle_http_auth)
         self.add_handler("HTTPREQUEST", self.__handle_http_request)
+        self.add_handler("EVENT", self.__handle_event)
         self.add_handler("PING", self.__handle_ping)
         self.add_handler("PONG", self.__handle_pong)
         self.add_handler("SHUTDOWN", self.__handle_shutdown)
 
         self.uri_handlers = {}
+        self.event_handlers = {}
 
         self.MSG_INFO = kismet_pb2.MsgbusMessage.INFO
         self.MSG_ERROR = kismet_pb2.MsgbusMessage.ERROR
@@ -401,6 +405,41 @@ class ExternalInterface(object):
 
         self.write_ext_packet("HTTPREGISTERURI", reguri)
 
+    def add_event_handler(self, event, handler):
+        """
+        Register on the eventbus for an event, and call handler with it.
+
+        :param event: Event type UTF-8 string, or "*" for all events (may be verbose!)
+        :param handler: Handler function, called with (event, content_dictionary)
+        as parameters.
+        :return: None
+        """
+
+        if event not in self.event_handlers:
+            self.event_handlers[event] = handler
+
+        regevt = eventbus_pb2.EventbusRegisterListener()
+        regevt.event = event
+
+        self.write_ext_packet("EVENTBUSREGISTER", regevt)
+
+    def publish_event(self, event, content_json):
+        """
+        Publish an event on the eventbus; see the docs for additional info and
+        limitations on events coming from the external api eventbus interface.
+
+        :param event: Event type UTF-8 string; should not collide with internal Kismet
+        eventbus events.
+        :param content_json: UTF-8 string JSON content of eventbus event.
+        :return: None
+        """
+
+        pubevt = eventbus_pb2.EventbusPublishEvent()
+        pubevt.event_type = event
+        pubevt.event_content_json = content_json
+        
+        self.write_ext_packet("EVENTBUSPUBLISH", pubevt)
+
     def is_running(self):
         """
         Is the external interface service running?
@@ -610,6 +649,17 @@ class ExternalInterface(object):
         pong.ParseFromString(packet)
 
         self.last_pong = time.time()
+
+    def __handle_event(self, seqno, packet):
+        event = eventbus_pb2.Event()
+        event.ParseFromString(packet)
+
+        event_json = json.loads(event.event_json)
+
+        event_type = event_json.get("kismet.eventbus.type")
+
+        if event_type in self.event_handlers:
+            self.event_handlers[event_type](event_type, event_json.get("kismet.eventbus.content"))
 
     def __handle_shutdown(self, seqno, packet):
         shutdown = kismet_pb2.ExternalShutdown()
