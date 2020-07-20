@@ -651,15 +651,17 @@ class ExternalInterface(object):
         self.last_pong = time.time()
 
     def __handle_event(self, seqno, packet):
-        event = eventbus_pb2.Event()
+        event = eventbus_pb2.EventbusEvent()
         event.ParseFromString(packet)
 
         event_json = json.loads(event.event_json)
 
-        event_type = event_json.get("kismet.eventbus.type")
+        event_type = event_json.get("kismet.eventbus.type", "UNKNOWN")
 
-        if event_type in self.event_handlers:
-            self.event_handlers[event_type](event_type, event_json.get("kismet.eventbus.content"))
+        if "*" in self.event_handlers:
+            self.event_handlers["*"](event_type, event_json.get("kismet.eventbus.content", {}))
+        elif event_type in self.event_handlers:
+            self.event_handlers[event_type](event_type, event_json.get("kismet.eventbus.content", {}))
 
     def __handle_shutdown(self, seqno, packet):
         shutdown = kismet_pb2.ExternalShutdown()
