@@ -1,5 +1,6 @@
 # Python compiled code
 *.pyc
+*.swp
 /*.egg-info/
 /build/
 /dist/
