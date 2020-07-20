@@ -39,7 +39,7 @@ from . import kismet_pb2
 from . import http_pb2
 from . import datasource_pb2
 
-__version__ = "2020.04.02"
+__version__ = "2020.07.01"
 
 class ExternalInterface(object):
     """
@@ -222,6 +222,7 @@ class ExternalInterface(object):
             print("FATAL:  Encountered an error receiving data from Kismet", e, file=sys.stderr)
             self.running = False
             self.kill()
+            raise
         finally:
             self.running = False
             self.kill()
@@ -562,7 +563,7 @@ class ExternalInterface(object):
             raise RuntimeError("No URI handler registered for request {} {}".format(request.method, request.uri))
         self.uri_handlers[request.method][request.uri](self, request)
 
-    def send_http_response(self, req_id, data="", resultcode=200, stream=False, finished=True):
+    def send_http_response(self, req_id, data=b'', resultcode=200, stream=False, finished=True):
         """
         Send a HTTP response; this populates a URI when triggered.
 
@@ -575,27 +576,25 @@ class ExternalInterface(object):
 
         :param req_id: HTTP request ID, provided in the HttpRequest message.  This must be sent with
         every response which is part of the same request.
-        :param data: HTTP data to be sent.  This may be broken up into multiple response objects
-        automatically.
+        :param data: HTTP data to be sent, as bytes.  This may be broken up into multiple 
+        response objects automatically.
         :param resultcode: HTTP result code; the result code in the final response (finished = True)
         is sent as the final HTTP code.
         :param stream: This response is one of many in a stream, the connection will be held open
         until a send_http_response with finished = False
         :param finished: This is the last response of many in a stream, the connection will be closed.
         """
-        resp = http_pb2.HttpResponse()
-
-        # Set the response
-        resp.req_id = req_id
 
         # Break the data into chunks and send each chunk as part of the response
         for block in range(0, len(data), 1024):
+            resp = http_pb2.HttpResponse()
+            resp.req_id = req_id
             resp.content = data[block:block+1024]
             self.write_ext_packet("HTTPRESPONSE", resp)
 
-        # Do we finish it up?
         if not stream or (stream and finished):
-            resp.content = ""
+            resp = http_pb2.HttpResponse()
+            resp.req_id = req_id
             resp.resultcode = resultcode
             resp.close_response = True
             self.write_ext_packet("HTTPRESPONSE", resp)
