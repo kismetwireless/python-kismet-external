@@ -419,7 +419,7 @@ class ExternalInterface(object):
             self.event_handlers[event] = handler
 
         regevt = eventbus_pb2.EventbusRegisterListener()
-        regevt.event = event
+        regevt.event.extend(event)
 
         self.write_ext_packet("EVENTBUSREGISTER", regevt)
 
