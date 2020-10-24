@@ -22,7 +22,7 @@ setup(name='kismetexternal',
       author='Mike Kershaw / Dragorn',
       author_email='dragorn@kismetwireless.net',
       url='https://www.kismetwireless.net/',
-      install_requires=['protobuf >= 3.0.0'],
+      install_requires=['protobuf >= 3.0.0', 'websockets >= 8.0.0'],
       python_requires='>=3.2',
       packages=find_packages(),
      )

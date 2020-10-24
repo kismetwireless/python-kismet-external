@@ -1,7 +1,7 @@
 # Python implementation of the simple API for communicating with Kismet
 # via the Kismet External API
 #
-# (c) 2018 Mike Kershaw / Dragorn
+# (c) 2020 Mike Kershaw / Dragorn
 # Licensed under GPL2 or above
 
 """
@@ -20,14 +20,17 @@ import errno
 import fcntl
 import json
 import os
+import pathlib
 import select
 import signal
 import socket
 import struct
+import ssl
 import sys
 import threading
 import traceback
 import time
+import websockets
 
 import google.protobuf
 
@@ -41,23 +44,22 @@ from . import http_pb2
 from . import datasource_pb2
 from . import eventbus_pb2
 
-__version__ = "2020.07.01"
+__version__ = "2020.10.01"
 
 class ExternalInterface(object):
     """
     External interface super-class
     """
-    def __init__(self, infd=-1, outfd=-1, remote=None):
+    def __init__(self, config):
         """
         Initialize the external interface; interfaces launched by Kismet are
         mapped to a pipe passed via --in-fd and --out-fd arguments; remote
         interfaces are initialized with a host:port
 
-        :param infd: input FD, from --in-fd argument
-        :param outfd: output FD, from --out-fd argument
-        :param remote: remote host:port, from --connect argument
         :return: nothing
         """
+
+        self.set_config(config)
 
         self.loop = asyncio.get_event_loop()
 
@@ -70,9 +72,6 @@ class ExternalInterface(object):
         # Any additional functions we call as we exit
         self.exit_callbacks = []
 
-        self.infd = infd
-        self.outfd = outfd
-        self.remote = remote
         self.cmdnum = 0
         self.iothread = None
 
@@ -92,6 +91,8 @@ class ExternalInterface(object):
 
         self.errorcb = None
 
+        self.websocket = None
+
         self.handlers = {}
 
         self.add_handler("HTTPAUTH", self.__handle_http_auth)
@@ -109,10 +110,31 @@ class ExternalInterface(object):
         self.MSG_ALERT = kismet_pb2.MsgbusMessage.ALERT
         self.MSG_FATAL = kismet_pb2.MsgbusMessage.FATAL
 
+    @staticmethod
+    def common_getopt(parser):
+        parser.add_argument('--in-fd', action="store", type=int, dest="infd", help="incoming fd pair (IPC mode only)")
+        parser.add_argument('--out-fd', action="store", type=int, dest="outfd", help="outgoing fd pair (IPC mode only)")
+        parser.add_argument('--connect', action="store", dest="connect", help="remote kismet server on host:port; by default this uses websocket mode, to use the legacy tcp mode, specify the --tcp argument")
+        parser.add_argument("--source", action="store", dest="source", help="capture source definition, required for remote capture")
+        parser.add_argument("--tcp", action="store_true", default=False, help="enable legacy tcp mode")
+        parser.add_argument("--ssl", action="store_true", default=False, dest="ssl", help="enable SSL")
+        parser.add_argument("--ssl-certificate", action="store", dest="sslcertificate", help="provide a SSL CA certificate to validate server")
+        parser.add_argument("--user", action="store", dest="user", help="Kismet username for websockets-based remote capture")
+        parser.add_argument("--password", action="store", dest="password", help="Kismet password for websockets-based remote capture")
+        parser.add_argument("--apikey", action="store", dest="apikey", help="Kismet API key for websockets-based remote capture")
+        parser.add_argument("--endpoint", action="store", dest="endpoint", default="/datasource/remote/remotesource.ws", help="alternate endpoint for websockets remote capture")
+        parser.add_argument("--disable-retry", action="store", dest="endpoint", default=False, help="disable automatic reconnection")
+        parser.add_argument("--autodetect", action="store", nargs="?", help="look for a Kismet server in announce mode, optionally waiting for a specific server UUID")
+
+        return parser
+
+    def set_config(self, config):
+        self.config = config
+
     async def __async_open_fds(self):
         try:
-            r_file = os.fdopen(self.infd, 'rb')
-            w_file = os.fdopen(self.outfd, 'wb')
+            r_file = os.fdopen(self.config.infd, 'rb')
+            w_file = os.fdopen(self.config.outfd, 'wb')
 
             reader = asyncio.StreamReader(loop=self.loop)
             r_protocol = asyncio.StreamReaderProtocol(reader)
@@ -129,25 +151,62 @@ class ExternalInterface(object):
             traceback.print_exc(file=sys.stderr)
             self.kill()
 
-    async def __async_open_remote(self, remote):
+    async def __async_open_tcp_remote(self):
+        reader, writer = await asyncio.open_connection(self.remote_host, self.remote_port)
+
+        if self.debug:
+            print("Remote connection established.")
+
+        return reader, writer
+
+    async def __async_open_ws_remote(self):
+        print("opening websocket")
+
+        if (not 'user' in self.config or not 'password' in self.config) and not 'apikey' in self.config:
+            raise "username and password or API key required"
+
+        if 'ssl' in self.config:
+            self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    
+            if 'sslcert' in self.config:
+                local_ca = pathlib.Path(__file__).with_name(self.config.sslcerts)
+                self.ssl_context.load_verify_locations(local_ca)
+
+                if 'user' in self.config:
+                    self.uri = f"wss://{self.remote_host}:{self.remote_port}{self.config.endpoint}?user={self.config.user}&password={self.config.password}"
+                else:
+                    self.uri = f"wss://{self.remote_host}:{self.remote_port}{self.config.endpoint}?KISMET={self.config.apikey}"
+
+                self.websocket = await websockets.connect(self.uri, ssl=self.ssl_context)
+                return self.websocket, self.websocket
+
+            if 'user' in self.config:
+                self.uri = f"ws://{self.remote_host}:{self.remote_port}{self.config.endpoint}?user={self.config.user}&password={self.config.password}"
+            else:
+                self.uri = f"ws://{self.remote_host}:{self.remote_port}{self.config.endpoint}?KISMET={self.config.apikey}"
+
+            return await websockets.connect(self.uri)
+
+    async def __async_open_remote(self):
         try:
-            eq = remote.find(":")
+            eq = self.config.connect.find(":")
 
             if eq == -1:
                 raise RuntimeError("Expected host:port for remote")
 
-            self.remote_host = remote[:eq]
-            self.remote_port = int(remote[eq+1:])
+            self.remote_host = self.config.connect[:eq]
+            self.remote_port = int(self.config.connect[eq+1:])
 
             if self.debug:
                 print("Opening connection to remote host {}:{}".format(self.remote_host, self.remote_port))
 
-            reader, writer = await asyncio.open_connection(self.remote_host, self.remote_port)
+            print(self.config.tcp)
 
-            if self.debug:
-                print("Remote connection established.")
+            if self.config.tcp:
+                self.ext_reader, self.ext_writer = await self.__async_open_tcp_remote()
 
-            return reader, writer
+            self.websocket = await self.__async_open_ws_remote()
+
         except Exception as e:
             print("Failed to connect to remote host: ", e, file=sys.stderr)
             # traceback.print_exc(file=sys.stderr)
@@ -204,7 +263,9 @@ class ExternalInterface(object):
 
                 try:
                     if self.graceful_spindown:
-                        await self.ext_writer.drain()
+                        if not self.ext_writer == None:
+                            await self.ext_writer.drain()
+
                         self.kill_ioloop = True
                         return
                 except Exception as e:
@@ -212,7 +273,10 @@ class ExternalInterface(object):
                     return
 
                 # Read a chunk of data, append it to our buffer
-                readdata = await self.ext_reader.read(4096)
+                if self.websocket == None:
+                    readdata = await self.ext_reader.read(4096)
+                else:
+                    readdata = await self.websocket.recv()
 
                 if len(readdata) == 0:
                     raise BufferError("Kismet connection lost")
@@ -288,21 +352,20 @@ class ExternalInterface(object):
         :return: None
         """
 
-        if self.infd is not None and self.infd >= 0 and self.outfd is not None and self.outfd >= 0:
+        if self.config.infd is not None and self.config.infd >= 0 and self.config.outfd is not None and self.config.outfd >= 0:
             if self.debug:
-                print("DEBUG:  Linking descriptors", self.infd, self.outfd, file=sys.stderr)
+                print("DEBUG:  Linking descriptors", self.config.infd, self.config.outfd, file=sys.stderr)
             self.ext_reader, self.ext_writer = await self.__async_open_fds()
             if self.debug:
-                print("DEBUG:  Linked descriptors", self.infd, self.outfd, self.ext_writer, file=sys.stderr)
-        elif self.remote is not None:
+                print("DEBUG:  Linked descriptors", self.config.infd, self.config.outfd, self.ext_writer, file=sys.stderr)
+        elif self.config.connect is not None:
             if self.debug:
-                print("asyncio building connection to remote", self.remote)
+                print("asyncio building connection to remote", self.config.connect)
 
-            self.ext_reader, self.ext_writer = await self.__async_open_remote(self.remote)
+            await self.__async_open_remote()
 
         else:
             raise RuntimeError("Expected descriptor pair or remote connection")
-
 
     def run(self):
         """
@@ -499,7 +562,7 @@ class ExternalInterface(object):
         """
 
         try:
-            if not 'ext_writer' in vars(self):
+            if not 'ext_writer' in vars(self) and self.websocket == None:
                 raise RuntimeError("packet written before connection established")
 
             signature = 0xDECAFBAD
@@ -511,9 +574,12 @@ class ExternalInterface(object):
             packet = bytearray(struct.pack("!III", signature, checksum, length))
 
             # Drop it on the asyncio writer and queue it to go out
-            self.ext_writer.write(packet)
-            self.ext_writer.write(serial)
-            self.add_task(self.ext_writer.drain)
+            if not self.websocket == None:
+                self.add_task(self.websocket.send, [packet + serial])
+            else:
+                self.ext_writer.write(packet + serial)
+                self.add_task(self.ext_writer.drain)
+
         except Exception as e:
             # If we failed a low-level write we're just screwed, exit
             print("FATAL:  Encountered error writing to kismet: ", e, file=sys.stderr)
@@ -673,8 +739,10 @@ class Datasource(ExternalInterface):
     """
     Datasource implementation
     """
-    def __init__(self, infd=-1, outfd=-1, remote=None):
-        super(Datasource, self).__init__(infd=infd, outfd=outfd, remote=remote)
+    def __init__(self, config):
+        super(Datasource, self).__init__(config)
+
+        self.config = config
 
         self.listinterfaces = None
         self.probesource = None
