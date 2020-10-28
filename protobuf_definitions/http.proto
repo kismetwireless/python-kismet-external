@@ -2,6 +2,8 @@ syntax = "proto2";
 
 package KismetExternalHttp;
 
+option optimize_for = LITE_RUNTIME;
+
 // Request an auth token be sent in a HttpAuthToken frame
 message HttpAuthTokenRequest {
 
@@ -25,7 +27,7 @@ message HttpRegisterUri {
     // Method; ie GET or POST; a URI can only implement a single method and
     // must register multiple URIs for multiple methods.
     required string method = 2;
-    // Authentication - does the URI require authentication?  The proxy can
+    // Authentication - does the URI require authentication?  The proxy can 
     // handle this automatically.
     optional bool obsolete_auth_required = 3;
 }
@@ -77,3 +79,4 @@ message HttpResponse {
     // Is this the end of this connection?
     optional bool close_response = 5;
 }
+

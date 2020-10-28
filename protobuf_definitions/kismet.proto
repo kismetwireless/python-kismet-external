@@ -2,14 +2,16 @@ syntax = "proto2";
 
 package KismetExternal;
 
+option optimize_for = LITE_RUNTIME;
+
 // Overall command structure used for all Kismet helper binaries;  Each command
 // is an arbitrary string (command type), with a unique sequence number which is
 // used in responses to the command.
 //
-// The payload of the command (content) is arbitrary, however Kismet uses
+// The payload of the command (content) is arbitrary, however Kismet uses 
 // Google Protobuf for all embedded commands, and it strongly recommended that
 // other implementations do as well.
-//
+// 
 // This command is wrapped inside the kismet network structure which defines
 // total length, embeds a checksum, and so on.
 
@@ -56,3 +58,4 @@ message ExternalShutdown {
 message SystemRegister {
     required string subsystem = 1;
 }
+
