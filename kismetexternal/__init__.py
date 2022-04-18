@@ -256,7 +256,7 @@ class ExternalInterface(object):
         # shutting down
         try:
             while not self.kill_ioloop:
-                if not self.last_pong == 0 and time.time() - self.last_pont > 5:
+                if not self.last_pong == 0 and time.time() - self.last_pong > 5:
                     raise RuntimeError("No PONG from Kismet in 5 seconds")
 
                 try:
